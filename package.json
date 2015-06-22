@@ -1,0 +1,14 @@
+{
+  "name": "gulp-nova",
+  "version": "0.0.0",
+  "description": "nova compile tool",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "melonhuang",
+  "license": "BSD-2-Clause",
+  "dependencies": {
+    "through2": "~2.0.0",
+  }
+}
