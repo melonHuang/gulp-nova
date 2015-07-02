@@ -16,7 +16,16 @@ function compile(file, encoding, callback) {
         template: template
     }
 
-    var script = $('script').html();
+    var domModule = $('dom-module');
+    var script;
+
+    if(domModule.length != 0) {
+        script = domModule.children('script').html();
+    } else {
+        script = $('script').html();
+    }
+
+
 
     script = script.replace('Nova', 'NovaExports');
     script = 'NovaExports.exports=' + JSON.stringify(exports) + ';' + script;

@@ -1,6 +1,6 @@
 {
   "name": "gulp-nova",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "nova compile tool",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,6 @@
   "author": "melonhuang",
   "license": "BSD-2-Clause",
   "dependencies": {
-    "through2": "~2.0.0",
+    "through2": "~2.0.0"
   }
 }
