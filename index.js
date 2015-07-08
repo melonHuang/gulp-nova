@@ -9,8 +9,8 @@ function compile(file, encoding, callback) {
 
     var $ = cheerio.load(source);
 
-    var style = $.html('style');
-    var template = $.html('template');
+    var style = $('style').html();
+    var template = $('template').html();
     var exports = {
         stylesheet: style,
         template: template
