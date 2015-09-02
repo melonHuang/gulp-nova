@@ -28,7 +28,8 @@ function compile(file, encoding, callback) {
 
 
     script = script.replace('Nova', 'NovaExports');
-    script = 'NovaExports.exports=' + JSON.stringify(exports) + ';' + script;
+    script = 'NovaExports._fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports._fixedUglify + "') 
+                        + ';' + script;
 
     file.contents = new Buffer(script);
     callback(null, file);
