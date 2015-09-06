@@ -6,6 +6,7 @@ var path = require('path');
 var cheerio = require('cheerio');
 var umdWrap = require('umd-wrap');
 var assign = Object.assign || require('object.assign');
+var CleanCSS = require('clean-css');
 
 var i = 0;
 
@@ -105,7 +106,7 @@ function htmlToJs($) {
     var style = $('style').html();
     var template = $('template').html();
     var exports = {
-        stylesheet: style,
+        stylesheet: style ? new CleanCSS().minify(style).styles : style,
         template: template
     }
 
