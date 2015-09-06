@@ -32,7 +32,7 @@ module.exports = function(opt) {
             },
             umd: {
                 exports: function(file) {
-                    var dirpath = path.dirname(path.resolve(file.path)).split('/');
+                    var dirpath = path.dirname(path.resolve(file.path)).split(path.sep);
                     var lastFoldName = dirpath[dirpath.length - 1];
                     return capitalize(dashToCamelCase(lastFoldName));
                 },
