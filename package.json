@@ -1,6 +1,6 @@
 {
   "name": "gulp-nova",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "nova compile tool",
   "main": "index.js",
   "scripts": {
