@@ -1,6 +1,6 @@
 {
   "name": "gulp-nova",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "nova compile tool",
   "main": "index.js",
   "scripts": {
@@ -9,12 +9,13 @@
   "author": "melonhuang",
   "license": "BSD-2-Clause",
   "dependencies": {
+    "autoprefixer": "~6.0.1",
     "cheerio": "~0.19.0",
     "clean-css": "^3.4.1",
     "object.assign": "~3.0.1",
-    "through2": "~2.0.0",
-    "umd-wrap": "^0.1.1",
     "post-css": "~5.0.4",
-    "autoprefixer": "~6.0.1"
+    "slash": "^1.0.0",
+    "through2": "~2.0.0",
+    "umd-wrap": "^0.1.1"
   }
 }

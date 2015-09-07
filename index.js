@@ -10,7 +10,7 @@ var CleanCSS = require('clean-css');
 var autoprefixer = require('autoprefixer');
 var postcss = require('postcss');
 var prefixer = postcss([autoprefixer]);
-var Q = require('q');
+var slash = require('slash');
 
 var i = 0;
 
@@ -63,6 +63,8 @@ module.exports = function(opt) {
                 file.contents = new Buffer(wrappedScript);
                 callback(null, file);
             });
+        }).catch(function(e) {
+            console.log(e);
         });
     })
 };
@@ -78,10 +80,10 @@ function parseDependencies($, extra) {
             name = $(depEle).attr('src');
         }
         name = path.relative(extra.baseUrl, name).match(/(.+)\.js$/)[1];
-        var pathArr = name.split('/');
+        var pathArr = name.split(path.sep);
         var exports = $(depEle).attr('exports') || '_' + dashToCamelCase(pathArr[pathArr.length - 1].split('.')[0]);
         depArr.push({
-            name: name,
+            name: slash(name),
             exports: exports
         });
     });
@@ -104,13 +106,11 @@ function capitalize(str) {
 
 
 function htmlToJs($) {
-    var deferred = Q.defer();
-
     var style = $('style').html() || '';
     var template = $('template').html() || '';
 
     // clean and prefix css
-    prefixer.process(style).then(function(result) {
+    return prefixer.process(style).then(function(result) {
         var exports = {
             stylesheet: new CleanCSS().minify(result.css).styles,
             template: template
@@ -128,12 +128,9 @@ function htmlToJs($) {
         script = script.replace('Nova', 'NovaExports');
         script = 'NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
 
-        deferred.resolve(script);
+        return script;
 
     });
-
-    return deferred.promise;
-
 }
 
 
