@@ -112,7 +112,7 @@ function htmlToJs($) {
     // clean and prefix css
     prefixer.process(style).then(function(result) {
         var exports = {
-            stylesheet: new CleanCSS().minify(result.css),
+            stylesheet: new CleanCSS().minify(result.css).styles,
             template: template
         }
 
