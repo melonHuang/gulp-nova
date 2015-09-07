@@ -7,60 +7,62 @@ var cheerio = require('cheerio');
 var umdWrap = require('umd-wrap');
 var assign = Object.assign || require('object.assign');
 var CleanCSS = require('clean-css');
+var autoprefixer = require('autoprefixer');
+var postcss = require('postcss');
+var prefixer = postcss([autoprefixer]);
+var Q = require('q');
 
 var i = 0;
 
 module.exports = function(opt) {
     return through.obj(function(file, encoding, callback) {
         var source = new Buffer(file.contents, 'utf8').toString();
-        //source = '<link rel="import" href="a/b.html"/><script src="lib/wx.js" ></script>' + source;
         var $ = cheerio.load(source);
-        var script = htmlToJs($);
 
-
-
-        opt = assign(opt || {}, {
-            /*
-             * 将<link rel="import" href="ele.html">编译成<script src="ele.js">
-             * @param {String} linkHref
-             * @return {String} scriptSrc
-             */
-            linkToJsPathMap: function(linkHref) {
-                var dirname = path.dirname(linkHref);
-                var basename = path.basename(linkHref, path.extname(linkHref));
-                return dirname + '/' + basename + '.js';
-            },
-            umd: {
-                exports: function(file) {
-                    var dirpath = path.dirname(path.resolve(file.path)).split(path.sep);
-                    var lastFoldName = dirpath[dirpath.length - 1];
-                    return capitalize(dashToCamelCase(lastFoldName));
+        htmlToJs($).then(function(script) {
+            opt = assign(opt || {}, {
+                /*
+                 * 将<link rel="import" href="ele.html">编译成<script src="ele.js">
+                 * @param {String} linkHref
+                 * @return {String} scriptSrc
+                 */
+                linkToJsPathMap: function(linkHref) {
+                    var dirname = path.dirname(linkHref);
+                    var basename = path.basename(linkHref, path.extname(linkHref));
+                    return dirname + '/' + basename + '.js';
                 },
-                dependencies: function(file) {
-                    return parseDependencies($, {
-                        linkToJsPathMap: opt.linkToJsPathMap,
-                        baseUrl: opt.baseUrl
-                    });
-                },
-                root: function(file) {
-                    return 'window';
+                umd: {
+                    exports: function(file) {
+                        var dirpath = path.dirname(path.resolve(file.path)).split(path.sep);
+                        var lastFoldName = dirpath[dirpath.length - 1];
+                        return capitalize(dashToCamelCase(lastFoldName));
+                    },
+                    dependencies: function(file) {
+                        return parseDependencies($, {
+                            linkToJsPathMap: opt.linkToJsPathMap,
+                            baseUrl: opt.baseUrl
+                        });
+                    },
+                    root: function(file) {
+                        return 'window';
+                    }
+                }
+            });
+
+            // wrap umd
+            if(opt.umd) {
+                var options = {
+                    code: script,
+                    exports: opt.umd.exports(file),
+                    dependencies: opt.umd.dependencies(file)
                 }
             }
-        });
 
-        // wrap umd
-        if(opt.umd) {
-            var options = {
-                code: script,
-                exports: opt.umd.exports(file),
-                dependencies: opt.umd.dependencies(file)
-            }
-        }
-
-        umdWrap(options, function(err, wrappedScript) {
-            wrappedScript = '(function() {' + wrappedScript + '}).call(' + opt.umd.root() + ')';
-            file.contents = new Buffer(wrappedScript);
-            callback(null, file);
+            umdWrap(options, function(err, wrappedScript) {
+                wrappedScript = '(function() {' + wrappedScript + '}).call(' + opt.umd.root() + ')';
+                file.contents = new Buffer(wrappedScript);
+                callback(null, file);
+            });
         });
     })
 };
@@ -102,27 +104,36 @@ function capitalize(str) {
 
 
 function htmlToJs($) {
+    var deferred = Q.defer();
 
-    var style = $('style').html();
-    var template = $('template').html();
-    var exports = {
-        stylesheet: style ? new CleanCSS().minify(style).styles : style,
-        template: template
-    }
+    var style = $('style').html() || '';
+    var template = $('template').html() || '';
 
-    var domModule = $('dom-module');
-    var script;
+    // clean and prefix css
+    prefixer.process(style).then(function(result) {
+        var exports = {
+            stylesheet: new CleanCSS().minify(result.css),
+            template: template
+        }
 
-    if(domModule.length != 0) {
-        script = domModule.children('script').html();
-    } else {
-        script = $('script:not([src])').html();
-    }
+        var domModule = $('dom-module');
+        var script;
 
-    script = script.replace('Nova', 'NovaExports');
-    script = 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + "script>') + ';' + script;
+        if(domModule.length != 0) {
+            script = domModule.children('script').html();
+        } else {
+            script = $('script:not([src])').html();
+        }
 
-    return script;
+        script = script.replace('Nova', 'NovaExports');
+        script = 'NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
+
+        deferred.resolve(script);
+
+    });
+
+    return deferred.promise;
+
 }
 
 
