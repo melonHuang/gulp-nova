@@ -125,7 +125,7 @@ function htmlToJs($) {
             script = $('script:not([src])').html();
         }
 
-        script = script.replace('Nova', 'NovaExports');
+        script = script.replace('Nova(', 'NovaExports(');
         script = 'NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
 
         return script;
