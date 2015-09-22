@@ -10,7 +10,7 @@ var CleanCSS = require('clean-css');
 var autoprefixer = require('autoprefixer');
 var postcss = require('postcss');
 var prefixer = postcss([autoprefixer]);
-var slash = require('slash');
+var slash = require('slash');;
 
 var i = 0;
 
@@ -18,6 +18,13 @@ module.exports = function(opt) {
     return through.obj(function(file, encoding, callback) {
         var source = new Buffer(file.contents, 'utf8').toString();
         var $ = cheerio.load(source);
+        var domModule = $('template[is=dom-module]');
+
+        if(domModule.length == 0) {
+            console.warn(file.path, 'no dom-module found');
+            callback();
+            return;
+        };
 
         htmlToJs($).then(function(script) {
             opt = assign(opt || {}, {
@@ -70,7 +77,8 @@ module.exports = function(opt) {
 };
 
 function parseDependencies($, extra) {
-    var depEls = $('link[rel=import],script[src]');
+    var domModule = $('template[is=dom-module]');
+    var depEls = domModule.children('link[rel=import],script[src]');
     var depArr = [];
     depEls.each(function(i, depEle) {
         var name = '';
@@ -106,8 +114,14 @@ function capitalize(str) {
 
 
 function htmlToJs($) {
-    var style = $('style').html() || '';
-    var template = $('template').html() || '';
+    var domModule = $('template[is=dom-module]');
+
+
+    var style = domModule.children('style').html() || '';
+    var template = domModule.children('template').html() || '';
+    var script = domModule.children('script:not([src])').html();
+
+    id = domModule.attr('id');
 
     // clean and prefix css
     return prefixer.process(style).then(function(result) {
@@ -116,14 +130,6 @@ function htmlToJs($) {
             template: template
         }
 
-        var domModule = $('dom-module');
-        var script;
-
-        if(domModule.length != 0) {
-            script = domModule.children('script').html();
-        } else {
-            script = $('script:not([src])').html();
-        }
 
         script = script.replace('Nova(', 'NovaExports(');
         script = 'NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
