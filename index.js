@@ -6,15 +6,21 @@ var path = require('path');
 var cheerio = require('cheerio');
 var umdWrap = require('umd-wrap');
 var assign = Object.assign || require('object.assign');
+var extend = require('extend');
 var CleanCSS = require('clean-css');
 var autoprefixer = require('autoprefixer');
 var postcss = require('postcss');
 var prefixer = postcss([autoprefixer]);
 var slash = require('slash');;
+var requirejs = require('requirejs');
+var temp = require('temp').track();
+var amdclean = require('amdclean');
+var utils = require('./utils');
+var Promise = require('promise');
 
 var i = 0;
 
-module.exports = function(opt) {
+module.exports = function(option) {
     return through.obj(function(file, encoding, callback) {
         var source = new Buffer(file.contents, 'utf8').toString();
         var $ = cheerio.load(source);
@@ -27,90 +33,61 @@ module.exports = function(opt) {
         };
 
         htmlToJs($).then(function(script) {
-            opt = assign(opt || {}, {
-                /*
-                 * 将<link rel="import" href="ele.html">编译成<script src="ele.js">
-                 * @param {String} linkHref
-                 * @return {String} scriptSrc
-                 */
-                linkToJsPathMap: function(linkHref) {
-                    var dirname = path.dirname(linkHref);
-                    var basename = path.basename(linkHref, path.extname(linkHref));
-                    return dirname + '/' + basename + '.js';
-                },
+            var defaultOpt = {
                 umd: {
                     exports: function(file) {
                         var dirpath = path.dirname(path.resolve(file.path)).split(path.sep);
                         var lastFoldName = dirpath[dirpath.length - 1];
-                        return capitalize(dashToCamelCase(lastFoldName));
-                    },
-                    dependencies: function(file) {
-                        return parseDependencies($, {
-                            linkToJsPathMap: opt.linkToJsPathMap,
-                            baseUrl: opt.baseUrl
-                        });
+                        return utils.capitalize(utils.dashToCamelCase(lastFoldName));
                     },
                     root: function(file) {
                         return 'window';
                     }
                 }
-            });
+            };
+            var opt = extend({}, defaultOpt, option);
+
+            var dependencies = parseDependencies($);
+
 
             // wrap umd
             if(opt.umd) {
                 var options = {
                     code: script,
-                    exports: opt.umd.exports(file),
-                    dependencies: opt.umd.dependencies(file)
+                    exports: getExport($) || opt.umd.exports(file),
+                    dependencies: dependencies
                 }
-            }
 
-            umdWrap(options, function(err, wrappedScript) {
-                wrappedScript = '(function() {' + wrappedScript + '}).call(' + opt.umd.root() + ')';
-                file.contents = new Buffer(wrappedScript);
+                umdWrap(options, function(err, wrappedScript) {
+                    wrappedScript = '(function() {' + wrappedScript + '}).call(' + opt.umd.root() + ')';
+
+                    if(opt.combo) {
+                        combo({
+                            file: file,
+                            code: wrappedScript,
+                            dependencies: dependencies,
+                            baseUrl: opt.combo.baseUrl
+                        }).then(function(cleanedScript) {
+                            console.log(cleanedScript);
+                            file.contents = new Buffer(cleanedScript);
+                            callback(null, file);
+                        });
+                    } else {
+                        file.contents = new Buffer(wrappedScript);
+                        callback(null, file);
+                    }
+                });
+            } else {
+                file.contents = new Buffer(script);
                 callback(null, file);
-            });
+            }
         }).catch(function(e) {
             console.log(e);
         });
     })
 };
 
-function parseDependencies($, extra) {
-    var domModule = $('template[is=dom-module]');
-    var depEls = domModule.children('link[rel=import],script[src]');
-    var depArr = [];
-    depEls.each(function(i, depEle) {
-        var name = '';
-        if(depEle.name == 'link') {
-            name = extra.linkToJsPathMap($(depEle).attr('href'));
-        } else {
-            name = $(depEle).attr('src');
-        }
-        name = path.relative(extra.baseUrl, name).match(/(.+)\.js$/)[1];
-        var pathArr = name.split(path.sep);
-        var exports = $(depEle).attr('exports') || '_' + dashToCamelCase(pathArr[pathArr.length - 1].split('.')[0]);
-        depArr.push({
-            name: slash(name),
-            exports: exports
-        });
-    });
-    return depArr;
-}
 
-function dashToCamelCase(dash) {
-    if (dash.indexOf('-') < 0) {
-        return dash;
-    }
-    return dash.replace(/-([a-z])/g, function(m) {
-        return m[1].toUpperCase();
-    });
-}
-
-function capitalize(str) {
-    str = str[0].toUpperCase() + str.slice(1);
-    return str;
-}
 
 
 function htmlToJs($) {
@@ -119,7 +96,7 @@ function htmlToJs($) {
 
     var style = domModule.children('style').html() || '';
     var template = domModule.children('template').html() || '';
-    var script = domModule.children('script:not([src])').html();
+    var script = domModule.children('script:not([require-src])').html();
 
     id = domModule.attr('id');
 
@@ -139,4 +116,56 @@ function htmlToJs($) {
     });
 }
 
+
+var exportsCount = 0;
+function parseDependencies($, extra) {
+    var domModule = $('template[is=dom-module]');
+    var depEls = domModule.children('link[rel=import],script[require-src]');
+    var depArr = [];
+    depEls.each(function(i, depEle) {
+        var name = '';
+        name = $(depEle).attr('require-src').trim();
+
+        var pathArr = name.split(path.sep);
+        var exports = $(depEle).attr('exports') || '_' + ++exportsCount;
+        depArr.push({
+            name: slash(name),
+            exports: exports
+        });
+    });
+    return depArr;
+}
+
+function getExport($) {
+    var domModule = $('template[is=dom-module]');
+    var script = domModule.children('script:not([require-src])');
+    return script.attr('exports');
+}
+
+function combo(opt) {
+    var tmpSource = temp.openSync({ suffix: '.js'});
+    var sourcePath = opt.file.path.replace(/.html$/, '.js');
+    var tmpFile = temp.openSync({ suffix: '.js'});
+    fs.writeFileSync(sourcePath, opt.code, 'utf-8');
+    var baseUrl = opt.baseUrl;
+    var config = {
+        baseUrl: baseUrl,
+        name: path.relative(baseUrl, sourcePath.replace(/.js/, '')),
+        out: path.relative(baseUrl, tmpFile.path),
+        onModuleBundleComplete: function (data) {
+            outputFile = data.path,
+            cleanedCode = amdclean.clean({
+                'filePath': outputFile,
+                'transformAMDChecks': false
+            });
+            fs.writeFileSync(outputFile, cleanedCode);
+        }
+    }
+    return new Promise(function(resolve) {
+        requirejs.optimize(config, function() {
+            var content = fs.readFileSync(config.out, 'utf8');
+            resolve(content);
+        });
+    });
+}
 
