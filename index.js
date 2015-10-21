@@ -49,26 +49,27 @@ module.exports = function(option) {
 
             var dependencies = parseDependencies($);
 
-
             // wrap umd
-            if(opt.umd) {
+            // combo的实现依赖于UMD
+            if(opt.umd || opt.combo) {
                 var options = {
                     code: script,
-                    exports: getExport($) || opt.umd.exports(file),
+                    exports: getExport($) || (opt.umd && opt.umd.exports(file)) || defaultOpt.umd.exports(file),
                     dependencies: dependencies
                 }
 
                 umdWrap(options, function(err, wrappedScript) {
-                    wrappedScript = '(function() {' + wrappedScript + '}).call(' + opt.umd.root() + ')';
+                    wrappedScript = '(function() {' + wrappedScript + '}).call(' + (opt.umd && opt.umd.root() || defaultOpt.umd.root()) + ')';
 
                     if(opt.combo) {
                         combo({
                             file: file,
                             code: wrappedScript,
                             dependencies: dependencies,
-                            baseUrl: opt.combo.baseUrl
+                            baseUrl: opt.combo.baseUrl,
+                            // 控制combo后，是否保留最外层的UMD Wrap
+                            keepUmd: !!opt.umd
                         }).then(function(cleanedScript) {
-                            console.log(cleanedScript);
                             file.contents = new Buffer(cleanedScript);
                             callback(null, file);
                         });
@@ -109,7 +110,8 @@ function htmlToJs($) {
 
 
         script = script.replace('Nova(', 'NovaExports(');
-        script = 'NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
+        script = 'undefined;NovaExports.__fixedUglify="script>";' + 'NovaExports.exports=' + JSON.stringify(exports).replace(/<\/script>/g, '</" + NovaExports.__fixedUglify + "') + ';' + script;
+
 
         return script;
 
@@ -156,7 +158,7 @@ function combo(opt) {
             outputFile = data.path,
             cleanedCode = amdclean.clean({
                 'filePath': outputFile,
-                'transformAMDChecks': false
+                'transformAMDChecks': !opt.keepUmd
             });
             fs.writeFileSync(outputFile, cleanedCode);
         }
